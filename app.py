@@ -12,7 +12,11 @@ from datetime import datetime
 import uuid
 import cv2
 from typing import List, Dict, Any
+
+# Load the Haar Cascade
+face_cascade = cv2.CascadeClassifier('static/models/haarcascade_frontalface_default.xml')
 import face_recognition
+
 import io
 
 # Initialize FastAPI app
@@ -74,24 +78,24 @@ def base64_to_image(base64_string):
     return img
 
 def get_face_encoding(img):
-    """Get face encoding from image"""
-    # Convert BGR to RGB (face_recognition uses RGB)
-    rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
-    # Find face locations
-    face_locations = face_recognition.face_locations(rgb_img)
-    
-    if not face_locations:
+    """Get face encoding from image using Haar Cascade"""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    if len(faces) == 0:
         return None
+
+    # Get the first face detected
+    (x, y, w, h) = faces[0]
+    face_img = img[y:y+h, x:x+w]
     
-    # Get face encodings
-    face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
-    
-    if not face_encodings:
+    # Get face encoding (you can use any encoding method here)
+    face_encoding = face_recognition.face_encodings(face_img)
+
+    if not face_encoding:
         return None
-    
-    # Return first face encoding
-    return face_encodings[0].tolist()
+
+    return face_encoding[0].tolist()
 
 def get_attendance_file_path():
     """Get the path to the current month's attendance file"""
@@ -154,12 +158,12 @@ initialize_known_faces_file()
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request):
     """Serve the index.html page"""
-    return FileResponse("index.html")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/update", response_class=HTMLResponse)
 async def get_update(request: Request):
     """Serve the update.html page"""
-    return FileResponse("update.html")
+    return templates.TemplateResponse("update.html", {"request": request})
 
 @app.get("/api/known-faces")
 async def get_known_faces():
@@ -244,6 +248,9 @@ async def log_attendance(request: Request):
         entry_time = data.get("entryTime")
         exit_time = data.get("exitTime")
         
+        # Debugging logs
+        print(f"Logging attendance for: {name}, Entry Time: {entry_time}, Exit Time: {exit_time}")
+        
         if not name:
             raise HTTPException(status_code=400, detail="Employee name is required")
         
@@ -258,6 +265,7 @@ async def log_attendance(request: Request):
         return {"success": True, "message": "Attendance logged successfully"}
     
     except Exception as e:
+        print(f"Error logging attendance: {str(e)}")  # Debugging log
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/system-status")
